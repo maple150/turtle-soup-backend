@@ -1,0 +1,50 @@
+name = "turtle-back"
+main = "src/index.ts"
+compatibility_date = "2026-05-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+APP_ENV = "development"
+CORS_ORIGIN = "http://localhost:5173"
+ACCESS_TOKEN_TTL_SECONDS = "3600"
+REFRESH_TOKEN_TTL_SECONDS = "2592000"
+WS_TICKET_TTL_SECONDS = "60"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+RATE_LIMIT_MAX_REQUESTS = "120"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "turtle-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[kv_namespaces]]
+binding = "APP_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+
+[[r2_buckets]]
+binding = "APP_R2"
+bucket_name = "turtle-assets"
+preview_bucket_name = "turtle-assets-preview"
+
+[[queues.producers]]
+binding = "APP_QUEUE"
+queue = "turtle-events"
+
+[[queues.consumers]]
+queue = "turtle-events"
+max_batch_size = 10
+max_batch_timeout = 5
+
+[durable_objects]
+bindings = [
+  { name = "ROOM_DO", class_name = "RoomDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO"]

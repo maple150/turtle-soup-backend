@@ -1,0 +1,206 @@
+import { RoomRepository } from '@/db/repositories'
+import { createDb } from '@/db/client'
+import type { AppBindings, AuthenticatedUser } from '@/env'
+import type { RoomRow, UserRow } from '@/types/db'
+import { signWsTicket } from '@/utils/jwt'
+import { generateId } from '@/utils/random'
+import { AppError } from '@/utils/response'
+import { generateRoomCode } from '@/utils/roomCode'
+import { now } from '@/utils/time'
+
+async function ensureUniqueRoomCode(env: AppBindings) {
+  const db = createDb(env)
+
+  for (let i = 0; i < 8; i += 1) {
+    const code = generateRoomCode()
+    const existing = await db.one<{ id: string }>('SELECT id FROM rooms WHERE room_code = ? LIMIT 1', [code])
+
+    if (!existing) {
+      return code
+    }
+  }
+
+  throw new AppError(500, 'ROOM_CODE_GENERATION_FAILED', 'Failed to generate room code')
+}
+
+async function getUserNickname(env: AppBindings, userId: string) {
+  const db = createDb(env)
+  const user = await db.one<UserRow>('SELECT id, nickname FROM users WHERE id = ? LIMIT 1', [userId])
+
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'User not found')
+  }
+
+  return user.nickname
+}
+
+export async function bootstrapRoomDurableObject(env: AppBindings, roomCode: string) {
+  const room = await RoomService.getByCode(env, roomCode)
+  const id = env.ROOM_DO.idFromName(room.roomCode)
+  const stub = env.ROOM_DO.get(id)
+
+  await stub.fetch('https://room.internal/internal/bootstrap', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(room)
+  })
+}
+
+export class RoomService {
+  static async create(
+    env: AppBindings,
+    authUser: AuthenticatedUser,
+    payload: {
+      name: string
+      description: string
+      mode: 'casual' | 'ranked' | 'private'
+      capacity: number
+      allowSpectators: boolean
+      isPrivate: boolean
+      maxQuestionsPerRound: number
+    }
+  ) {
+    const roomCode = await ensureUniqueRoomCode(env)
+    const roomId = generateId('room')
+    const timestamp = now()
+
+    await RoomRepository.insert(env, {
+      id: roomId,
+      roomCode,
+      name: payload.name,
+      description: payload.description,
+      status: 'waiting',
+      mode: payload.mode,
+      hostUserId: authUser.userId,
+      capacity: payload.capacity,
+      settings: {
+        allowSpectators: payload.allowSpectators,
+        isPrivate: payload.isPrivate,
+        maxQuestionsPerRound: payload.maxQuestionsPerRound
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+
+    await env.APP_KV.put(`room:code:${roomCode}`, roomId)
+    await bootstrapRoomDurableObject(env, roomCode)
+
+    return this.getByCode(env, roomCode)
+  }
+
+  static async list(
+    env: AppBindings,
+    query: { page: number; pageSize: number; status?: string; mode?: string; keyword?: string }
+  ) {
+    const { rows, total } = await RoomRepository.list(env, query)
+
+    return {
+      list: await Promise.all(rows.map((row) => this.mapRoomRow(env, row))),
+      total,
+      page: query.page,
+      pageSize: query.pageSize
+    }
+  }
+
+  static async getByCode(env: AppBindings, roomCode: string) {
+    const row = await RoomRepository.findByCode(env, roomCode)
+
+    if (!row) {
+      throw new AppError(404, 'ROOM_NOT_FOUND', 'Room not found')
+    }
+
+    return this.mapRoomRow(env, row)
+  }
+
+  static async join(
+    env: AppBindings,
+    roomCode: string,
+    authUser: AuthenticatedUser,
+    payload?: { nickname?: string }
+  ) {
+    const room = await this.getByCode(env, roomCode)
+    await bootstrapRoomDurableObject(env, room.roomCode)
+    await RoomRepository.touchActivity(env, room.id)
+
+    return {
+      room,
+      member: {
+        userId: authUser.userId,
+        nickname: payload?.nickname || authUser.nickname,
+        role: room.hostUserId === authUser.userId ? 'host' : 'player'
+      }
+    }
+  }
+
+  static async leave(env: AppBindings, roomCode: string, authUser: AuthenticatedUser) {
+    const room = await this.getByCode(env, roomCode)
+    const id = env.ROOM_DO.idFromName(room.roomCode)
+    const stub = env.ROOM_DO.get(id)
+
+    await stub.fetch('https://room.internal/internal/leave', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        roomCode,
+        userId: authUser.userId
+      })
+    })
+
+    await RoomRepository.touchActivity(env, room.id)
+
+    return {
+      roomCode,
+      left: true
+    }
+  }
+
+  static async createWsTicket(env: AppBindings, roomCode: string, authUser: AuthenticatedUser) {
+    const room = await this.getByCode(env, roomCode)
+    const role = room.hostUserId === authUser.userId ? 'host' : 'player'
+    const ticket = await signWsTicket(env, {
+      sub: authUser.userId,
+      roomCode,
+      nickname: authUser.nickname,
+      role
+    })
+
+    return {
+      ticket,
+      roomCode,
+      expiresIn: Number(env.WS_TICKET_TTL_SECONDS || 60),
+      websocketPath: `/ws/rooms/${roomCode}?ticket=${ticket}`
+    }
+  }
+
+  private static async mapRoomRow(env: AppBindings, row: RoomRow) {
+    const hostNickname = await getUserNickname(env, row.host_user_id)
+
+    return {
+      id: row.id,
+      roomCode: row.room_code,
+      name: row.name,
+      description: row.description,
+      status: row.status as 'waiting' | 'playing' | 'revealed' | 'finished',
+      mode: row.mode as 'casual' | 'ranked' | 'private',
+      hostUserId: row.host_user_id,
+      hostNickname,
+      currentRoundId: row.current_round_id,
+      currentSoupId: row.current_soup_id,
+      capacity: row.capacity,
+      settings: JSON.parse(row.settings) as {
+        allowSpectators: boolean
+        isPrivate: boolean
+        maxQuestionsPerRound: number
+      },
+      lastActivityAt: row.last_activity_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      startedAt: row.started_at,
+      endedAt: row.ended_at
+    }
+  }
+}

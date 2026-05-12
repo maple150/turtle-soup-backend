@@ -1,0 +1,23 @@
+{
+  "name": "turtle-back",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.3",
+    "hono": "^4.6.16",
+    "jose": "^5.9.6",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260511.0",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.16.0"
+  }
+}
