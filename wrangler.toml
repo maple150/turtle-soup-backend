@@ -8,8 +8,8 @@ workers_dev = true
 enabled = true
 
 [vars]
-APP_ENV = "development"
-CORS_ORIGIN = "http://localhost:5173"
+APP_ENV = "production"
+CORS_ORIGIN = "https://turtle-soup-frontend-puce.vercel.app"
 ACCESS_TOKEN_TTL_SECONDS = "3600"
 REFRESH_TOKEN_TTL_SECONDS = "2592000"
 WS_TICKET_TTL_SECONDS = "60"
@@ -23,7 +23,7 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 [[kv_namespaces]]
 binding = "APP_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "1791f1081f8a4dbb8de79905c8beb576"
 preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
 
 [[queues.producers]]
