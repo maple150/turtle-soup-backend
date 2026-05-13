@@ -1,4 +1,4 @@
-name = "turtle-back"
+name = "turtle-soup-backend"
 main = "src/index.ts"
 compatibility_date = "2026-05-11"
 compatibility_flags = ["nodejs_compat"]
@@ -25,11 +25,6 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 binding = "APP_KV"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
-
-[[r2_buckets]]
-binding = "APP_R2"
-bucket_name = "turtle-assets"
-preview_bucket_name = "turtle-assets-preview"
 
 [[queues.producers]]
 binding = "APP_QUEUE"

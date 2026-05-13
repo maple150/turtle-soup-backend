@@ -38,7 +38,6 @@ export interface WsTicketPayload extends JWTPayload {
 export interface AppBindings {
   DB: D1Database
   APP_KV: KVNamespace
-  APP_R2: R2Bucket
   APP_QUEUE: Queue<QueueEnvelope>
   ROOM_DO: DurableObjectNamespace
   APP_ENV: string
