@@ -13,6 +13,16 @@ export interface AiHostConfig {
   maxTokens: number
 }
 
+export interface AiConnectionTestResult {
+  reachable: boolean
+  model: string
+  provider: string
+  latencyMs: number
+  preview: string | null
+  statusCode?: number
+  errorMessage?: string
+}
+
 const AI_CONFIG_KV_KEY = 'settings:ai-host'
 const INTERNAL_EMAIL_SUFFIX = '@internal.local'
 
@@ -46,6 +56,97 @@ export class AiService {
   static async saveConfig(env: AppBindings, payload: AiHostConfig) {
     await env.APP_KV.put(AI_CONFIG_KV_KEY, JSON.stringify(payload))
     return payload
+  }
+
+  static async testConnection(
+    env: AppBindings,
+    payload?: Partial<AiHostConfig>
+  ): Promise<AiConnectionTestResult> {
+    const base = await this.getConfig(env)
+    const config: AiHostConfig = {
+      ...base,
+      ...payload,
+      apiKey: payload?.apiKey ?? base.apiKey
+    }
+
+    if (!config.baseUrl || !config.apiKey || !config.model) {
+      return {
+        reachable: false,
+        model: config.model || '',
+        provider: config.provider,
+        latencyMs: 0,
+        preview: null,
+        errorMessage: '请先填写模型服务地址、访问密钥和模型名称。'
+      }
+    }
+
+    const startedAt = Date.now()
+
+    try {
+      const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: config.model,
+          temperature: 0,
+          max_tokens: Math.min(config.maxTokens, 32),
+          messages: [
+            {
+              role: 'system',
+              content: '你是连通性测试助手，请只回复“连接成功”。'
+            },
+            {
+              role: 'user',
+              content: '请返回测试结果。'
+            }
+          ]
+        })
+      })
+
+      const latencyMs = Date.now() - startedAt
+
+      if (!response.ok) {
+        const errorText = await response.text()
+
+        return {
+          reachable: false,
+          model: config.model,
+          provider: config.provider,
+          latencyMs,
+          preview: null,
+          statusCode: response.status,
+          errorMessage: errorText.slice(0, 200) || '模型接口返回了非成功状态码。'
+        }
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{
+          message?: {
+            content?: string
+          }
+        }>
+      }
+
+      return {
+        reachable: true,
+        model: config.model,
+        provider: config.provider,
+        latencyMs,
+        preview: data.choices?.[0]?.message?.content?.slice(0, 120) ?? null
+      }
+    } catch (error) {
+      return {
+        reachable: false,
+        model: config.model,
+        provider: config.provider,
+        latencyMs: Date.now() - startedAt,
+        preview: null,
+        errorMessage: error instanceof Error ? error.message : '无法连接到模型服务。'
+      }
+    }
   }
 
   static async pickRandomSoup(env: AppBindings) {

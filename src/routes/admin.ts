@@ -10,6 +10,8 @@ import { UserService } from '@/services/user.service'
 import { AppError, ok } from '@/utils/response'
 import {
   adminAiConfigSchema,
+  adminAiConfigTestSchema,
+  adminImportSoupsSchema,
   adminRoomCodeParamSchema,
   adminRoomsQuerySchema,
   adminSoupIdParamSchema,
@@ -90,6 +92,12 @@ adminRoutes.patch(
   }
 )
 
+adminRoutes.post('/soups/import', zValidator('json', adminImportSoupsSchema), async (c) => {
+  const authUser = requireAdmin(c)
+  const payload = c.req.valid('json')
+  return ok(c, await SoupService.adminImport(c.env, authUser.userId, payload), 'Soups imported')
+})
+
 adminRoutes.get('/rooms', zValidator('query', adminRoomsQuerySchema), async (c) => {
   requireAdmin(c)
   return ok(c, await RoomService.adminList(c.env, c.req.valid('query')))
@@ -104,6 +112,16 @@ adminRoutes.patch(
     const params = c.req.valid('param')
     const payload = c.req.valid('json')
     return ok(c, await RoomService.adminUpdate(c.env, params.roomCode, payload), 'Room updated')
+  }
+)
+
+adminRoutes.delete(
+  '/rooms/:roomCode',
+  zValidator('param', adminRoomCodeParamSchema),
+  async (c) => {
+    requireAdmin(c)
+    const params = c.req.valid('param')
+    return ok(c, await RoomService.adminDelete(c.env, params.roomCode), 'Room deleted')
   }
 )
 
@@ -123,6 +141,12 @@ adminRoutes.put('/ai-config', zValidator('json', adminAiConfigSchema), async (c)
     }),
     'AI config updated'
   )
+})
+
+adminRoutes.post('/ai-config/test', zValidator('json', adminAiConfigTestSchema), async (c) => {
+  requireAdmin(c)
+  const payload = c.req.valid('json')
+  return ok(c, await AiService.testConnection(c.env, payload), 'AI connection checked')
 })
 
 export default adminRoutes

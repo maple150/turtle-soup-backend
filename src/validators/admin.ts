@@ -50,6 +50,22 @@ export const adminUpdateSoupSchema = z.object({
   isPublic: z.boolean().optional()
 })
 
+export const adminImportSoupItemSchema = z.object({
+  title: z.string().trim().min(2).max(100),
+  subtitle: z.string().trim().max(100).optional().or(z.literal('')),
+  description: z.string().trim().min(1).max(500),
+  content: z.string().trim().min(1),
+  answer: z.string().trim().min(1),
+  difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
+  tags: z.array(z.string().trim().min(1).max(32)).max(20).optional().default([]),
+  status: z.enum(['draft', 'published', 'archived']).optional().default('published'),
+  isPublic: z.boolean().optional().default(true)
+})
+
+export const adminImportSoupsSchema = z.object({
+  items: z.array(adminImportSoupItemSchema).min(1).max(200)
+})
+
 export const adminUpdateRoomSchema = z.object({
   name: z.string().trim().min(2).max(64).optional(),
   description: z.string().trim().min(1).max(500).optional(),
@@ -67,3 +83,5 @@ export const adminAiConfigSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.3),
   maxTokens: z.number().int().min(64).max(4096).default(512)
 })
+
+export const adminAiConfigTestSchema = adminAiConfigSchema

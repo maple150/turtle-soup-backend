@@ -27,7 +27,7 @@ import {
   roomStateEvent,
   snapshotEvent
 } from './RoomEvents'
-import { loadRoomState, RoomPersistenceManager, saveRoomState } from './RoomPersistence'
+import { clearRoomState, loadRoomState, RoomPersistenceManager, saveRoomState } from './RoomPersistence'
 import {
   answerQuestion,
   appendChatMessage,
@@ -91,6 +91,10 @@ export class RoomDO {
       return this.handleForcedLeave(request)
     }
 
+    if (url.pathname === '/internal/delete' && request.method === 'POST') {
+      return this.handleDelete()
+    }
+
     return new Response('Not found', { status: 404 })
   }
 
@@ -127,6 +131,24 @@ export class RoomDO {
   private async handleForcedLeave(request: Request) {
     const payload = (await request.json()) as { userId: string }
     await this.disconnectUser(payload.userId, 'Removed from room')
+
+    return Response.json({
+      ok: true
+    })
+  }
+
+  private async handleDelete() {
+    for (const session of this.sessions.values()) {
+      try {
+        session.socket.close(1001, 'Room deleted by admin')
+      } catch {
+        // Ignore close errors.
+      }
+    }
+
+    this.sessions.clear()
+    this.roomState = null
+    await clearRoomState(this.storage)
 
     return Response.json({
       ok: true

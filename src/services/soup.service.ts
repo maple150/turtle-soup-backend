@@ -289,4 +289,74 @@ export class SoupService {
 
     return this.adminGetById(env, soupId)
   }
+
+  static async adminImport(
+    env: AppBindings,
+    userId: string,
+    payload: {
+      items: Array<{
+        title: string
+        subtitle?: string
+        description: string
+        content: string
+        answer: string
+        difficulty: 'easy' | 'medium' | 'hard'
+        tags: string[]
+        status: 'draft' | 'published' | 'archived'
+        isPublic: boolean
+      }>
+    }
+  ) {
+    const db = createDb(env)
+    const timestamp = now()
+    const createdItems = payload.items.map((item) => ({
+      id: generateId('soup'),
+      title: item.title.trim()
+    }))
+
+    await db.batch(
+      payload.items.map((item, index) => ({
+        sql: `
+          INSERT INTO soups (
+            id,
+            title,
+            subtitle,
+            description,
+            content,
+            answer,
+            difficulty,
+            tags,
+            created_by,
+            is_public,
+            status,
+            favorite_count,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        params: [
+          createdItems[index].id,
+          item.title.trim(),
+          item.subtitle?.trim() || null,
+          item.description.trim(),
+          item.content.trim(),
+          item.answer.trim(),
+          item.difficulty,
+          JSON.stringify(item.tags),
+          userId,
+          item.isPublic ? 1 : 0,
+          item.status,
+          0,
+          timestamp,
+          timestamp
+        ]
+      }))
+    )
+
+    return {
+      importedCount: payload.items.length,
+      items: createdItems
+    }
+  }
 }

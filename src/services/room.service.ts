@@ -221,6 +221,39 @@ export class RoomService {
     return this.getByCode(env, roomCode)
   }
 
+  static async adminDelete(env: AppBindings, roomCode: string) {
+    const room = await this.getByCode(env, roomCode)
+    const db = createDb(env)
+    const id = env.ROOM_DO.idFromName(room.roomCode)
+    const stub = env.ROOM_DO.get(id)
+
+    await stub.fetch('https://room.internal/internal/delete', {
+      method: 'POST'
+    })
+
+    await db.batch([
+      {
+        sql: 'DELETE FROM game_questions WHERE room_id = ?',
+        params: [room.id]
+      },
+      {
+        sql: 'DELETE FROM game_rounds WHERE room_id = ?',
+        params: [room.id]
+      },
+      {
+        sql: 'DELETE FROM rooms WHERE id = ?',
+        params: [room.id]
+      }
+    ])
+
+    await env.APP_KV.delete(`room:code:${room.roomCode}`)
+
+    return {
+      roomCode: room.roomCode,
+      deleted: true
+    }
+  }
+
   static async attachRandomSoup(env: AppBindings, roomCode: string) {
     const room = await this.getByCode(env, roomCode)
     const soup = await AiService.pickRandomSoup(env)
