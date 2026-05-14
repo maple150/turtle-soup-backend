@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import type { AppEnv } from '@/env'
-import { assertRequiredSecrets } from '@/env'
 import { registerErrorHandling } from '@/middleware/error'
 import { loggerMiddleware } from '@/middleware/logger'
 import { rateLimitMiddleware } from '@/middleware/rateLimit'
@@ -22,21 +21,21 @@ export function buildApp() {
 
   app.use('*', loggerMiddleware)
   app.use(
-    '/api/*',
+    '*',
     cors({
       origin: (origin, c) => origin || c.env.CORS_ORIGIN,
       allowHeaders: ['Content-Type', 'Authorization'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })
   )
 
-  app.use('/api/*', async (c, next) => {
-    assertRequiredSecrets(c.env)
-    await next()
-  })
+  app.use('/auth/*', rateLimitMiddleware('auth'))
+  app.use('/rooms/*', rateLimitMiddleware('rooms'))
+  app.use('/soups/*', rateLimitMiddleware('soups'))
+  app.use('/admin/*', rateLimitMiddleware('admin'))
 
-  app.use('/api/*', rateLimitMiddleware('api'))
-
+  app.get('/', (c) => ok(c, null, 'turtle-soup-backend is running'))
+  app.get('/health', (c) => ok(c, null, 'healthy'))
   app.get('/healthz', (c) =>
     ok(c, {
       status: 'ok',
@@ -44,12 +43,12 @@ export function buildApp() {
     })
   )
 
-  app.route('/api/auth', authRoutes)
-  app.route('/api', usersRoutes)
-  app.route('/api', historyRoutes)
-  app.route('/api/soups', soupsRoutes)
-  app.route('/api/rooms', roomsRoutes)
-  app.route('/api/admin', adminRoutes)
+  app.route('/auth', authRoutes)
+  app.route('/', usersRoutes)
+  app.route('/', historyRoutes)
+  app.route('/soups', soupsRoutes)
+  app.route('/rooms', roomsRoutes)
+  app.route('/admin', adminRoutes)
 
   app.get('/ws/rooms/:roomCode', async (c) => {
     const roomCode = c.req.param('roomCode').toUpperCase()

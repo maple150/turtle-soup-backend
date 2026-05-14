@@ -1,6 +1,7 @@
 import { createDb } from '@/db/client'
 import type { AppBindings, AuthenticatedUser } from '@/env'
 import { enqueueAuditLog } from '@/queue/producer'
+import { AiService } from '@/services/ai.service'
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '@/utils/jwt'
 import { hashPassword, verifyPassword } from '@/utils/password'
 import { generateId, sha256Hex } from '@/utils/random'
@@ -18,24 +19,23 @@ interface UserRow {
 }
 
 export class AuthService {
-  static async register(
-    env: AppBindings,
-    payload: { username: string; nickname: string; email: string; password: string }
-  ) {
+  static async register(env: AppBindings, payload: { username: string; password: string }) {
     const db = createDb(env)
     const existing = await db.one<{ id: string }>(
-      'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
-      [payload.username, payload.email]
+      'SELECT id FROM users WHERE username = ? LIMIT 1',
+      [payload.username]
     )
 
     if (existing) {
-      throw new AppError(409, 'USER_EXISTS', 'Username or email already exists')
+      throw new AppError(409, 'USER_EXISTS', '用户名已存在')
     }
 
     const timestamp = now()
     const userId = generateId('user')
     const password = await hashPassword(payload.password)
     const roles = JSON.stringify(['player'])
+    const nickname = payload.username
+    const email = AiService.buildInternalEmail(payload.username)
 
     await db.run(
       `
@@ -45,11 +45,11 @@ export class AuthService {
       [
         userId,
         payload.username,
-        payload.nickname,
-        payload.email,
+        nickname,
+        email,
         password.hash,
         password.salt,
-        `${payload.nickname} joined Turtle Soup.`,
+        '',
         roles,
         timestamp,
         timestamp
@@ -65,21 +65,21 @@ export class AuthService {
     return {
       userId,
       username: payload.username,
-      nickname: payload.nickname,
-      email: payload.email
+      nickname,
+      email: null
     }
   }
 
-  static async login(env: AppBindings, payload: { account: string; password: string }) {
+  static async login(env: AppBindings, payload: { username: string; password: string }) {
     const db = createDb(env)
     const user = await db.one<UserRow>(
       `
       SELECT id, username, nickname, email, password_hash, password_salt, roles
       FROM users
-      WHERE username = ? OR email = ?
+      WHERE username = ?
       LIMIT 1
       `,
-      [payload.account, payload.account]
+      [payload.username]
     )
 
     if (!user) {

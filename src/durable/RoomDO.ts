@@ -2,6 +2,7 @@ import type { DurableObjectState } from '@cloudflare/workers-types'
 
 import type { AppBindings } from '@/env'
 import { enqueueGameArchive } from '@/queue/producer'
+import { AiService } from '@/services/ai.service'
 import { answerQuestionSchema, sendChatMessageSchema, sendQuestionSchema } from '@/validators/game'
 import { WsClientEvent } from '@/ws/events'
 import { parseWsMessage, stringifyEnvelope } from '@/ws/message'
@@ -229,7 +230,7 @@ export class RoomDO {
     }
 
     upsertMember(this.roomState, identity)
-    appendSystemMessage(this.roomState, `${session.nickname} joined the room.`)
+    appendSystemMessage(this.roomState, `${session.nickname} 加入了房间。`)
   }
 
   private async handleSocketClose(sessionId: string) {
@@ -248,7 +249,7 @@ export class RoomDO {
     }
 
     markMemberOffline(this.roomState, session.userId)
-    appendSystemMessage(this.roomState, `${session.nickname} left the room.`)
+    appendSystemMessage(this.roomState, `${session.nickname} 离开了房间。`)
     this.broadcast(memberLeftEvent(this.roomState.snapshot, session.userId))
     this.broadcast(roomStateEvent(this.roomState.snapshot))
     await this.persist()
@@ -358,8 +359,9 @@ export class RoomDO {
 
     this.assertHost(session)
     this.assertStateIn(['waiting', 'finished'])
-    startGame(this.roomState, this.roomState.snapshot.currentSoup)
-    appendSystemMessage(this.roomState, `${session.nickname} started the game.`)
+    const nextSoup = this.roomState.snapshot.currentSoup ?? (await AiService.pickRandomSoup(this.env))
+    startGame(this.roomState, nextSoup)
+    appendSystemMessage(this.roomState, `${session.nickname} 开始了游戏，AI 主持人已就位。`)
     await this.persistenceManager.createRoundOnGameStart(this.roomState.snapshot)
     await this.persist()
     this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
@@ -381,6 +383,18 @@ export class RoomDO {
     })
 
     this.broadcast(questionCreatedEvent(question))
+    const aiAnswer = await AiService.answerQuestion(this.env, this.roomState.snapshot, payload.content)
+    const answeredQuestion = answerQuestion(this.roomState, {
+      questionId: question.id,
+      answeredByUserId: null,
+      answeredByNickname: 'AI 主持人',
+      answerType: aiAnswer.answerType,
+      answerText: aiAnswer.answerText
+    })
+    appendSystemMessage(this.roomState, `AI 主持人已回答问题 #${question.ordinal}。`)
+    if (answeredQuestion) {
+      this.broadcast(answerCreatedEvent(answeredQuestion))
+    }
     this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
     this.sendToSession(session.sessionId, ackEvent('question.created', envelope.reqId))
     await this.persist()
@@ -409,7 +423,7 @@ export class RoomDO {
 
     appendSystemMessage(
       this.roomState,
-      `${session.nickname} answered question #${question.ordinal} with ${payload.answerType}.`
+      `${session.nickname} 回答了问题 #${question.ordinal}。`
     )
     this.broadcast(answerCreatedEvent(question))
     this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
@@ -425,7 +439,7 @@ export class RoomDO {
     this.assertHost(session)
     this.assertStateIn(['playing'])
     revealAnswer(this.roomState)
-    appendSystemMessage(this.roomState, `${session.nickname} revealed the answer.`)
+    appendSystemMessage(this.roomState, `${session.nickname} 公布了答案。`)
     await this.persistenceManager.syncRoundRuntime(this.roomState.snapshot)
     await this.persist()
     this.broadcast(gameRevealedEvent(this.roomState.snapshot))
@@ -441,7 +455,7 @@ export class RoomDO {
     this.assertHost(session)
     this.assertStateIn(['playing', 'revealed'])
     finishGame(this.roomState)
-    appendSystemMessage(this.roomState, `${session.nickname} finished the game.`)
+    appendSystemMessage(this.roomState, `${session.nickname} 结束了本局游戏。`)
     await this.persistenceManager.finalizeRound(this.roomState.snapshot)
     await this.persist()
     this.broadcast(gameFinishedEvent(this.roomState.snapshot))

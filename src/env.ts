@@ -50,6 +50,10 @@ export interface AppBindings {
   JWT_ACCESS_SECRET: string
   JWT_REFRESH_SECRET: string
   JWT_WS_SECRET: string
+  AI_API_BASE_URL?: string
+  AI_API_KEY?: string
+  AI_MODEL?: string
+  AI_SYSTEM_PROMPT?: string
 }
 
 export interface AppVariables {

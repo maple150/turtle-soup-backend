@@ -1,6 +1,7 @@
 import { RoomRepository } from '@/db/repositories'
 import { createDb } from '@/db/client'
 import type { AppBindings, AuthenticatedUser } from '@/env'
+import { AiService } from '@/services/ai.service'
 import type { RoomRow, UserRow } from '@/types/db'
 import { signWsTicket } from '@/utils/jwt'
 import { generateId } from '@/utils/random'
@@ -174,6 +175,68 @@ export class RoomService {
       expiresIn: Number(env.WS_TICKET_TTL_SECONDS || 60),
       websocketPath: `/ws/rooms/${roomCode}?ticket=${ticket}`
     }
+  }
+
+  static async adminList(env: AppBindings, query: { page: number; pageSize: number; keyword?: string }) {
+    return this.list(env, query)
+  }
+
+  static async adminUpdate(
+    env: AppBindings,
+    roomCode: string,
+    payload: {
+      name?: string
+      description?: string
+      status?: 'waiting' | 'playing' | 'revealed' | 'finished'
+      capacity?: number
+    }
+  ) {
+    const room = await this.getByCode(env, roomCode)
+    const db = createDb(env)
+    const nextUpdatedAt = now()
+
+    await db.run(
+      `
+      UPDATE rooms
+      SET
+        name = ?,
+        description = ?,
+        status = ?,
+        capacity = ?,
+        updated_at = ?,
+        last_activity_at = ?
+      WHERE id = ?
+      `,
+      [
+        payload.name?.trim() || room.name,
+        payload.description?.trim() || room.description,
+        payload.status || room.status,
+        payload.capacity ?? room.capacity,
+        nextUpdatedAt,
+        nextUpdatedAt,
+        room.id
+      ]
+    )
+
+    return this.getByCode(env, roomCode)
+  }
+
+  static async attachRandomSoup(env: AppBindings, roomCode: string) {
+    const room = await this.getByCode(env, roomCode)
+    const soup = await AiService.pickRandomSoup(env)
+
+    if (!soup) {
+      return null
+    }
+
+    const db = createDb(env)
+    await db.run('UPDATE rooms SET current_soup_id = ?, updated_at = ? WHERE id = ?', [
+      soup.id,
+      now(),
+      room.id
+    ])
+
+    return soup
   }
 
   private static async mapRoomRow(env: AppBindings, row: RoomRow) {

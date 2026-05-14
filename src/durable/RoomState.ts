@@ -53,11 +53,11 @@ export function createEmptyRoomState(roomCode = 'UNKNOWN'): DurableRoomState {
       id: '',
       roomCode,
       name: roomCode,
-      description: 'Room bootstrap has not arrived yet.',
+      description: '房间初始化中。',
       mode: 'casual',
       status: 'waiting',
       hostUserId: '',
-      hostNickname: 'Host',
+      hostNickname: '房主',
       capacity: 8,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -180,9 +180,9 @@ export function startGame(state: DurableRoomState, soup?: RoomSoupSnapshot | nul
   if (!state.snapshot.currentSoup) {
     state.snapshot.currentSoup = {
       id: 'unassigned',
-      title: 'Unassigned Soup',
+      title: '未分配题目',
       subtitle: null,
-      description: 'Host has not assigned a soup yet.',
+      description: '当前还没有可用题面，请稍后重新开始。',
       difficulty: 'medium',
       answer: null
     }
@@ -241,7 +241,7 @@ export function appendSystemMessage(state: DurableRoomState, content: string) {
   return appendChatMessage(state, {
     roomId: state.snapshot.id,
     senderUserId: 'system',
-    senderNickname: 'System',
+    senderNickname: '系统',
     content,
     kind: 'system'
   })
@@ -278,7 +278,7 @@ export function answerQuestion(
   state: DurableRoomState,
   payload: {
     questionId: string
-    answeredByUserId: string
+    answeredByUserId: string | null
     answeredByNickname: string
     answerType: GameAnswerType
     answerText: string
