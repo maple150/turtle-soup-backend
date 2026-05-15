@@ -1,6 +1,8 @@
 import { createDb } from '@/db/client'
 import type { AppBindings } from '@/env'
 import { AiService } from '@/services/ai.service'
+import { hashPassword } from '@/utils/password'
+import { generateId } from '@/utils/random'
 import { AppError } from '@/utils/response'
 import { now } from '@/utils/time'
 
@@ -205,5 +207,83 @@ export class UserService {
     )
 
     return this.getCurrentUser(env, userId)
+  }
+
+  static async adminCreateUser(
+    env: AppBindings,
+    payload: {
+      username: string
+      password: string
+      nickname?: string
+      email?: string
+      bio?: string
+      roles?: string[]
+      status?: 'active' | 'blocked' | 'deleted'
+    }
+  ) {
+    const db = createDb(env)
+    const username = payload.username.trim()
+    const existingUser = await db.one<{ id: string }>('SELECT id FROM users WHERE username = ? LIMIT 1', [username])
+
+    if (existingUser) {
+      throw new AppError(409, 'USER_EXISTS', '用户名已存在')
+    }
+
+    const email = payload.email?.trim() || AiService.buildInternalEmail(username)
+    const existingEmail = await db.one<{ id: string }>('SELECT id FROM users WHERE email = ? LIMIT 1', [email])
+
+    if (existingEmail) {
+      throw new AppError(409, 'EMAIL_EXISTS', '邮箱已存在')
+    }
+
+    const password = await hashPassword(payload.password)
+    const timestamp = now()
+    const userId = generateId('user')
+
+    await db.run(
+      `
+      INSERT INTO users (id, username, nickname, email, password_hash, password_salt, bio, roles, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        userId,
+        username,
+        payload.nickname?.trim() || username,
+        email,
+        password.hash,
+        password.salt,
+        payload.bio?.trim() || '',
+        JSON.stringify(payload.roles?.length ? payload.roles : ['player']),
+        payload.status ?? 'active',
+        timestamp,
+        timestamp
+      ]
+    )
+
+    return this.getCurrentUser(env, userId)
+  }
+
+  static async adminDeleteUser(env: AppBindings, userId: string) {
+    const db = createDb(env)
+    const current = await db.one<{ id: string }>('SELECT id FROM users WHERE id = ? LIMIT 1', [userId])
+
+    if (!current) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found')
+    }
+
+    await db.run(
+      `
+      UPDATE users
+      SET status = 'deleted', updated_at = ?
+      WHERE id = ?
+      `,
+      [now(), userId]
+    )
+    await db.run('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', [now(), userId])
+
+    return {
+      userId,
+      deleted: true
+    }
   }
 }

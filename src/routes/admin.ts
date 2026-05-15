@@ -11,6 +11,7 @@ import { AppError, ok } from '@/utils/response'
 import {
   adminAiConfigSchema,
   adminAiConfigTestSchema,
+  adminCreateUserSchema,
   adminImportSoupsSchema,
   adminRoomCodeParamSchema,
   adminRoomsQuerySchema,
@@ -63,6 +64,11 @@ adminRoutes.get('/users', zValidator('query', adminUsersQuerySchema), async (c) 
   return ok(c, await UserService.adminListUsers(c.env, c.req.valid('query')))
 })
 
+adminRoutes.post('/users', zValidator('json', adminCreateUserSchema), async (c) => {
+  requireAdmin(c)
+  return ok(c, await UserService.adminCreateUser(c.env, c.req.valid('json')), 'User created')
+})
+
 adminRoutes.patch(
   '/users/:userId',
   zValidator('param', adminUserIdParamSchema),
@@ -74,6 +80,12 @@ adminRoutes.patch(
     return ok(c, await UserService.adminUpdateUser(c.env, params.userId, payload), 'User updated')
   }
 )
+
+adminRoutes.delete('/users/:userId', zValidator('param', adminUserIdParamSchema), async (c) => {
+  requireAdmin(c)
+  const params = c.req.valid('param')
+  return ok(c, await UserService.adminDeleteUser(c.env, params.userId), 'User deleted')
+})
 
 adminRoutes.get('/soups', zValidator('query', adminSoupsQuerySchema), async (c) => {
   requireAdmin(c)
@@ -91,6 +103,12 @@ adminRoutes.patch(
     return ok(c, await SoupService.adminUpdate(c.env, params.soupId, payload), 'Soup updated')
   }
 )
+
+adminRoutes.delete('/soups/:soupId', zValidator('param', adminSoupIdParamSchema), async (c) => {
+  requireAdmin(c)
+  const params = c.req.valid('param')
+  return ok(c, await SoupService.adminDelete(c.env, params.soupId), 'Soup deleted')
+})
 
 adminRoutes.post('/soups/import', zValidator('json', adminImportSoupsSchema), async (c) => {
   const authUser = requireAdmin(c)

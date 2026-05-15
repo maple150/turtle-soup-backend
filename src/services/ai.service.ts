@@ -25,6 +25,9 @@ export interface AiConnectionTestResult {
 
 const AI_CONFIG_KV_KEY = 'settings:ai-host'
 const INTERNAL_EMAIL_SUFFIX = '@internal.local'
+const AI_CONFIG_CACHE_TTL_MS = 15 * 1000
+const AI_REQUEST_TIMEOUT_MS = 8000
+const AI_TEST_TIMEOUT_MS = 10000
 
 function defaultPrompt() {
   return [
@@ -37,11 +40,17 @@ function defaultPrompt() {
 }
 
 export class AiService {
+  private static cachedConfig: { value: AiHostConfig; expiresAt: number } | null = null
+
   static async getConfig(env: AppBindings): Promise<AiHostConfig> {
+    if (this.cachedConfig && this.cachedConfig.expiresAt > Date.now()) {
+      return this.cachedConfig.value
+    }
+
     const fromKv = await env.APP_KV.get(AI_CONFIG_KV_KEY, 'json')
     const config = (fromKv ?? {}) as Partial<AiHostConfig>
 
-    return {
+    const resolved = {
       enabled: config.enabled ?? true,
       provider: config.provider || 'openai-compatible',
       baseUrl: config.baseUrl || env.AI_API_BASE_URL || 'https://api.openai.com/v1',
@@ -51,10 +60,21 @@ export class AiService {
       temperature: typeof config.temperature === 'number' ? config.temperature : 0.3,
       maxTokens: typeof config.maxTokens === 'number' ? config.maxTokens : 512
     }
+
+    this.cachedConfig = {
+      value: resolved,
+      expiresAt: Date.now() + AI_CONFIG_CACHE_TTL_MS
+    }
+
+    return resolved
   }
 
   static async saveConfig(env: AppBindings, payload: AiHostConfig) {
     await env.APP_KV.put(AI_CONFIG_KV_KEY, JSON.stringify(payload))
+    this.cachedConfig = {
+      value: payload,
+      expiresAt: Date.now() + AI_CONFIG_CACHE_TTL_MS
+    }
     return payload
   }
 
@@ -85,6 +105,7 @@ export class AiService {
     try {
       const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
+        signal: this.createTimeoutSignal(AI_TEST_TIMEOUT_MS),
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${config.apiKey}`
@@ -92,7 +113,7 @@ export class AiService {
         body: JSON.stringify({
           model: config.model,
           temperature: 0,
-          max_tokens: Math.min(config.maxTokens, 32),
+          max_tokens: Math.min(config.maxTokens, 24),
           messages: [
             {
               role: 'system',
@@ -201,14 +222,15 @@ export class AiService {
     try {
       const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
+        signal: this.createTimeoutSignal(AI_REQUEST_TIMEOUT_MS),
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${config.apiKey}`
         },
         body: JSON.stringify({
           model: config.model,
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
+          temperature: Math.min(config.temperature, 0.2),
+          max_tokens: Math.min(config.maxTokens, 160),
           response_format: {
             type: 'json_object'
           },
@@ -308,5 +330,11 @@ export class AiService {
 
   static buildInternalEmail(username: string) {
     return `${username}${INTERNAL_EMAIL_SUFFIX}`
+  }
+
+  private static createTimeoutSignal(timeoutMs: number) {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort('timeout'), timeoutMs)
+    return controller.signal
   }
 }

@@ -443,6 +443,10 @@ export class RoomDO {
   }
 
   private async handleGameReveal(session: RoomSession, envelope: WsEnvelope) {
+    this.sendToSession(session.sessionId, errorEvent('Reveal answer has been disabled', envelope.reqId))
+    return
+    /*
+
     if (!this.roomState) {
       return
     }
@@ -456,6 +460,7 @@ export class RoomDO {
     this.broadcast(gameRevealedEvent(this.roomState.snapshot))
     this.broadcast(roomStateEvent(this.roomState.snapshot))
     this.sendToSession(session.sessionId, ackEvent('game.revealed', envelope.reqId))
+    */
   }
 
   private async handleGameFinish(session: RoomSession, envelope: WsEnvelope) {
@@ -467,11 +472,12 @@ export class RoomDO {
     this.assertStateIn(['playing', 'revealed'])
     finishGame(this.roomState)
     appendSystemMessage(this.roomState, `${session.nickname} 结束了本局游戏。`)
+    this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
+    this.broadcast(roomStateEvent(this.roomState.snapshot))
+    this.broadcast(gameFinishedEvent(this.roomState.snapshot))
+    this.sendToSession(session.sessionId, ackEvent('game.finished', envelope.reqId))
     await this.persistenceManager.finalizeRound(this.roomState.snapshot)
     await this.persist()
-    this.broadcast(gameFinishedEvent(this.roomState.snapshot))
-    this.broadcast(roomStateEvent(this.roomState.snapshot))
-    this.sendToSession(session.sessionId, ackEvent('game.finished', envelope.reqId))
     await enqueueGameArchive(this.env, {
       roomId: this.roomState.snapshot.id,
       roundId: this.roomState.snapshot.currentRound?.id ?? ''

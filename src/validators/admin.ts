@@ -38,6 +38,16 @@ export const adminUpdateUserSchema = z.object({
   status: z.enum(['active', 'blocked', 'deleted']).optional()
 })
 
+export const adminCreateUserSchema = z.object({
+  username: z.string().trim().min(3).max(32),
+  password: z.string().min(8).max(64),
+  nickname: z.string().trim().min(2).max(32).optional(),
+  email: z.string().trim().email().optional().or(z.literal('')),
+  bio: z.string().trim().max(500).optional(),
+  roles: z.array(z.string().trim().min(1).max(32)).max(10).optional().default(['player']),
+  status: z.enum(['active', 'blocked', 'deleted']).optional().default('active')
+})
+
 export const adminUpdateSoupSchema = z.object({
   title: z.string().trim().min(2).max(100).optional(),
   subtitle: z.string().trim().max(100).optional().or(z.literal('')),

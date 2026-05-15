@@ -359,4 +359,16 @@ export class SoupService {
       items: createdItems
     }
   }
+
+  static async adminDelete(env: AppBindings, soupId: string) {
+    const db = createDb(env)
+    await this.adminGetById(env, soupId)
+    await db.run('DELETE FROM favorites WHERE soup_id = ?', [soupId])
+    await db.run('DELETE FROM soups WHERE id = ?', [soupId])
+
+    return {
+      soupId,
+      deleted: true
+    }
+  }
 }
