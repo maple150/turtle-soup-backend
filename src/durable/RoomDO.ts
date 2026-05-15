@@ -405,20 +405,9 @@ export class RoomDO {
     })
 
     this.broadcast(questionCreatedEvent(question))
-    const aiAnswer = await AiService.answerQuestion(this.env, this.roomState.snapshot, payload.content)
-    const answeredQuestion = answerQuestion(this.roomState, {
-      questionId: question.id,
-      answeredByUserId: null,
-      answeredByNickname: 'AI 主持人',
-      answerType: aiAnswer.answerType,
-      answerText: aiAnswer.answerText
-    })
-    appendSystemMessage(this.roomState, `AI 主持人已回答问题 #${question.ordinal}。`)
-    if (answeredQuestion) {
-      this.broadcast(answerCreatedEvent(answeredQuestion))
-    }
     this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
     this.sendToSession(session.sessionId, ackEvent('question.created', envelope.reqId))
+    void this.resolveQuestionWithAi(question.id, question.roundId, payload.content)
     await this.persist()
   }
 
@@ -566,6 +555,73 @@ export class RoomDO {
       this.broadcast(memberLeftEvent(this.roomState.snapshot, userId))
       this.broadcast(roomStateEvent(this.roomState.snapshot))
       await this.persist()
+    }
+  }
+
+  private async resolveQuestionWithAi(questionId: string, roundId: string, questionText: string) {
+    try {
+      if (!this.roomState) {
+        return
+      }
+
+      const initialRound = this.roomState.snapshot.currentRound
+      const initialQuestion = this.roomState.snapshot.questions.find((item) => item.id === questionId)
+
+      if (!initialRound || initialRound.id !== roundId || !initialQuestion || initialQuestion.roundId !== roundId) {
+        return
+      }
+
+      const aiAnswer = await AiService.answerQuestion(this.env, this.roomState.snapshot, questionText)
+
+      if (!this.roomState) {
+        return
+      }
+
+      const currentRound = this.roomState.snapshot.currentRound
+      const currentQuestion = this.roomState.snapshot.questions.find((item) => item.id === questionId)
+
+      if (!currentRound || currentRound.id !== roundId || !currentQuestion || currentQuestion.roundId !== roundId) {
+        return
+      }
+
+      const answeredQuestion = answerQuestion(this.roomState, {
+        questionId,
+        answeredByUserId: null,
+        answeredByNickname: 'AI 主持人',
+        answerType: aiAnswer.answerType,
+        answerText: aiAnswer.answerText
+      })
+
+      if (!answeredQuestion) {
+        return
+      }
+
+      appendSystemMessage(this.roomState, `AI 主持人已回答问题 #${answeredQuestion.ordinal}。`)
+      this.broadcast(answerCreatedEvent(answeredQuestion))
+      this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
+      await this.persist()
+    } catch (error) {
+      console.error('Failed to resolve question with AI', error)
+
+      if (!this.roomState) {
+        return
+      }
+
+      const currentRound = this.roomState.snapshot.currentRound
+      const currentQuestion = this.roomState.snapshot.questions.find((item) => item.id === questionId)
+
+      if (!currentRound || currentRound.id !== roundId || !currentQuestion || currentQuestion.roundId !== roundId || currentQuestion.answerType) {
+        return
+      }
+
+      appendSystemMessage(this.roomState, 'AI 主持人暂时无法回答这道问题，请稍后再试。')
+      this.broadcast(gameStateUpdatedEvent(this.roomState.snapshot))
+
+      try {
+        await this.persist()
+      } catch (persistError) {
+        console.error('Failed to persist room state after AI error', persistError)
+      }
     }
   }
 }
