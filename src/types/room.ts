@@ -2,7 +2,7 @@ import type { ChatMessage, GameLifecycleState, GameQuestionRecord, GameRoundSnap
 
 export type RoomStatus = 'waiting' | 'playing' | 'revealed' | 'finished'
 export type RoomMode = 'casual' | 'ranked' | 'private'
-export type RoomMemberRole = 'host' | 'player' | 'spectator'
+export type RoomMemberRole = 'host' | 'moderator' | 'player' | 'spectator'
 
 export interface RoomSettings {
   allowSpectators: boolean

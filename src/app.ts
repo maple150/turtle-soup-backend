@@ -14,6 +14,29 @@ import usersRoutes from '@/routes/users'
 import { fail, ok } from '@/utils/response'
 import { verifyWsTicket } from '@/utils/jwt'
 
+const DEFAULT_CORS_ORIGINS = [
+  'https://turtle-soup-frontend.pages.dev',
+  'https://turtle-soup-frontend-puce.vercel.app'
+]
+
+function resolveCorsOrigin(origin: string, configuredOrigin: string) {
+  const configured = configuredOrigin
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const allowedOrigins = new Set([...DEFAULT_CORS_ORIGINS, ...configured])
+
+  if (!origin) {
+    return configured[0] || DEFAULT_CORS_ORIGINS[0]
+  }
+
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    return origin
+  }
+
+  return allowedOrigins.has(origin) ? origin : undefined
+}
+
 export function buildApp() {
   const app = new Hono<AppEnv>()
 
@@ -23,7 +46,7 @@ export function buildApp() {
   app.use(
     '*',
     cors({
-      origin: (origin, c) => origin || c.env.CORS_ORIGIN,
+      origin: (origin, c) => resolveCorsOrigin(origin, c.env.CORS_ORIGIN),
       allowHeaders: ['Content-Type', 'Authorization'],
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })

@@ -31,7 +31,7 @@ export interface WsTicketPayload extends JWTPayload {
   sub: string
   roomCode: string
   nickname: string
-  role: 'host' | 'player' | 'spectator'
+  role: 'host' | 'moderator' | 'player' | 'spectator'
   type: 'ws-ticket'
 }
 

@@ -6,7 +6,7 @@ export interface WsEnvelope<TEvent extends string = string, TData = unknown> {
 }
 
 export type WsRoomLifecycleState = 'waiting' | 'playing' | 'revealed' | 'finished'
-export type WsRoomMemberRole = 'host' | 'player' | 'spectator'
+export type WsRoomMemberRole = 'host' | 'moderator' | 'player' | 'spectator'
 export type WsAnswerType = 'yes' | 'no' | 'irrelevant'
 
 export interface WsRoomMember {

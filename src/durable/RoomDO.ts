@@ -50,7 +50,7 @@ interface RoomSession {
   sessionId: string
   userId: string
   nickname: string
-  role: 'host' | 'player' | 'spectator'
+  role: 'host' | 'moderator' | 'player' | 'spectator'
   socket: WebSocket
 }
 
@@ -498,8 +498,8 @@ export class RoomDO {
       return
     }
 
-    if (session.userId !== this.roomState.snapshot.hostUserId) {
-      throw new Error('Only the host can perform this action')
+    if (session.userId !== this.roomState.snapshot.hostUserId && session.role !== 'moderator') {
+      throw new Error('Only the host or moderator can perform this action')
     }
   }
 

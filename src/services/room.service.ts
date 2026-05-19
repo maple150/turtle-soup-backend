@@ -35,6 +35,18 @@ async function getUserNickname(env: AppBindings, userId: string) {
   return user.nickname
 }
 
+function resolveRoomRole(room: { hostUserId: string }, authUser: AuthenticatedUser) {
+  if (room.hostUserId === authUser.userId) {
+    return 'host' as const
+  }
+
+  if (authUser.roles.includes('moderator') || authUser.roles.includes('admin')) {
+    return 'moderator' as const
+  }
+
+  return 'player' as const
+}
+
 export async function bootstrapRoomDurableObject(env: AppBindings, roomCode: string) {
   const room = await RoomService.getByCode(env, roomCode)
   const id = env.ROOM_DO.idFromName(room.roomCode)
@@ -130,7 +142,7 @@ export class RoomService {
       member: {
         userId: authUser.userId,
         nickname: payload?.nickname || authUser.nickname,
-        role: room.hostUserId === authUser.userId ? 'host' : 'player'
+        role: resolveRoomRole(room, authUser)
       }
     }
   }
@@ -161,7 +173,7 @@ export class RoomService {
 
   static async createWsTicket(env: AppBindings, roomCode: string, authUser: AuthenticatedUser) {
     const room = await this.getByCode(env, roomCode)
-    const role = room.hostUserId === authUser.userId ? 'host' : 'player'
+    const role = resolveRoomRole(room, authUser)
     const ticket = await signWsTicket(env, {
       sub: authUser.userId,
       roomCode,

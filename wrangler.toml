@@ -9,7 +9,7 @@ enabled = true
 
 [vars]
 APP_ENV = "production"
-CORS_ORIGIN = "https://turtle-soup-frontend-puce.vercel.app"
+CORS_ORIGIN = "https://turtle-soup-frontend.pages.dev,https://turtle-soup-frontend-puce.vercel.app"
 ACCESS_TOKEN_TTL_SECONDS = "3600"
 REFRESH_TOKEN_TTL_SECONDS = "2592000"
 WS_TICKET_TTL_SECONDS = "60"

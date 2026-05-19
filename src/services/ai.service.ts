@@ -26,7 +26,7 @@ export interface AiConnectionTestResult {
 const AI_CONFIG_KV_KEY = 'settings:ai-host'
 const INTERNAL_EMAIL_SUFFIX = '@internal.local'
 const AI_CONFIG_CACHE_TTL_MS = 15 * 1000
-const AI_REQUEST_TIMEOUT_MS = 8000
+const AI_REQUEST_TIMEOUT_MS = 3000
 const AI_TEST_TIMEOUT_MS = 10000
 
 function defaultPrompt() {
@@ -230,7 +230,7 @@ export class AiService {
         body: JSON.stringify({
           model: config.model,
           temperature: Math.min(config.temperature, 0.2),
-          max_tokens: Math.min(config.maxTokens, 160),
+          max_tokens: Math.min(config.maxTokens, 96),
           response_format: {
             type: 'json_object'
           },
@@ -307,7 +307,7 @@ export class AiService {
       }
     }
 
-    if (/[是不是|是否|有没有|能否|会不会]/.test(questionText)) {
+    if (/(是不是|是否|有没有|能否|会不会)/.test(questionText)) {
       return {
         answerType: 'no' as const,
         answerText: '否，这个假设不是当前谜底的关键。'
